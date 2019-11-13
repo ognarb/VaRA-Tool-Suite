@@ -179,9 +179,12 @@ def generate_benchbuild_config(vara_cfg: s.Configuration,
         'varats.projects.c_projects.tmux',
         'varats.projects.c_projects.vim',
         'varats.projects.c_projects.x264',
-        'varats.projects.c_projects.xz',
+        'varats.projects.c_projects.xz'
     ]
-    projects_conf.value[:] += ['varats.projects.cpp_projects.doxygen']
+    projects_conf.value[:] += [
+        'varats.projects.cpp_projects.doxygen',
+        'varats.projects.cpp_projects.phasar'
+    ]
     projects_conf.value[:] += ['varats.projects.test_projects.basic_tests']
     projects_conf.value[:] += ['varats.projects.test_projects.taint_tests']
 
