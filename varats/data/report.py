@@ -3,8 +3,9 @@ Report module.
 """
 
 import typing as tp
-from enum import Enum
 import re
+from enum import Enum
+from abc import abstractmethod
 
 from plumbum import colors
 from plumbum.colorlib.styles import Color
@@ -22,6 +23,7 @@ class FileStatusExtension(Enum):
     Failed = ("failed", colors.lightred)
     CompileError = ("cerror", colors.red)
     Missing = ("###", colors.orange3)
+    Blocked = ("blocked", colors.blue)
 
     def get_status_extension(self) -> str:
         """
@@ -48,9 +50,8 @@ class FileStatusExtension(Enum):
         for status in FileStatusExtension:
             if str(status.value[0]) == status_extension:
                 return status
-        raise ValueError(
-            'Unknown file ending {status_ext}'.format(
-                status_ext=status_extension))
+        raise ValueError('Unknown file ending {status_ext}'.format(
+            status_ext=status_extension))
 
     @staticmethod
     def get_regex_grp() -> str:
@@ -67,6 +68,27 @@ class FileStatusExtension(Enum):
         regex_grp += "))"
         return regex_grp
 
+    @staticmethod
+    def get_file_status_from_str(status_name: str) -> 'FileStatusExtension':
+        """
+        Map names of file status to enum values.
+
+        Test:
+        >>> FileStatusExtension.get_file_status_from_str('success')
+        <FileStatusExtension.Success: ('success', <ANSIStyle: Green>)>
+
+        >>> FileStatusExtension.get_file_status_from_str('###')
+        <FileStatusExtension.Missing: ('###', <ANSIStyle: Full: Orange3>)>
+
+        >>> FileStatusExtension.get_file_status_from_str('CompileError')
+        <FileStatusExtension.CompileError: ('cerror', <ANSIStyle: Red>)>
+        """
+        for fs_enum in FileStatusExtension:
+            if status_name in (fs_enum.name, fs_enum.value[0]):
+                return fs_enum
+
+        raise ValueError('Unknown file status extension name')
+
 
 class MetaReport(type):
 
@@ -78,10 +100,10 @@ class MetaReport(type):
         r"(?P<file_commit_hash>.*)_(?P<UUID>[0-9a-fA-F\-]*)_" +
         FileStatusExtension.get_regex_grp() + r"?(?P<file_ext>\..*)?" + "$")
 
-    __RESULT_FILE_TEMPLATE = (
-        "{shorthand}-" + "{project_name}-" + "{binary_name}-" +
-        "{project_version}_" + "{project_uuid}_" + "{status_ext}" +
-        "{file_ext}")
+    __RESULT_FILE_TEMPLATE = ("{shorthand}-" + "{project_name}-" +
+                              "{binary_name}-" + "{project_version}_" +
+                              "{project_uuid}_" + "{status_ext}" +
+                              "{file_ext}")
 
     __SUPPLEMENTARY_RESULT_FILE_REGEX = re.compile(
         r"(?P<project_shorthand>.*)-" + r"SUPPL-" +
@@ -89,10 +111,12 @@ class MetaReport(type):
         r"(?P<file_commit_hash>.*)_(?P<UUID>[0-9a-fA-F\-]*)_" +
         r"(?P<info_type>[^\.]*)" + r"?(?P<file_ext>\..*)?" + "$")
 
-    __SUPPLEMENTARY_RESULT_FILE_TEMPLATE = (
-        "{shorthand}-" + "SUPPL-" + "{project_name}-" + "{binary_name}-" +
-        "{project_version}_" + "{project_uuid}_" + "{info_type}" +
-        "{file_ext}")
+    __SUPPLEMENTARY_RESULT_FILE_TEMPLATE = ("{shorthand}-" + "SUPPL-" +
+                                            "{project_name}-" +
+                                            "{binary_name}-" +
+                                            "{project_version}_" +
+                                            "{project_uuid}_" + "{info_type}" +
+                                            "{file_ext}")
 
     def __init__(cls: tp.Any, name: str, bases: tp.Tuple[tp.Any],
                  attrs: tp.Dict[str, tp.Any]) -> None:
@@ -150,6 +174,12 @@ class MetaReport(type):
         """ Check if the passed file name is a (Missing) result file. """
         return MetaReport.result_file_has_status(file_name,
                                                  FileStatusExtension.Missing)
+
+    @staticmethod
+    def result_file_has_status_blocked(file_name: str) -> bool:
+        """ Check if the passed file name is a (Missing) result file. """
+        return MetaReport.result_file_has_status(file_name,
+                                                 FileStatusExtension.Blocked)
 
     @staticmethod
     def result_file_has_status(file_name: str,
@@ -276,7 +306,17 @@ class MetaReport(type):
 
 
 class BaseReport(metaclass=MetaReport):
-    pass
+    @staticmethod
+    @abstractmethod
+    def get_file_name(project_name: str,
+                      binary_name: str,
+                      project_version: str,
+                      project_uuid: str,
+                      extension_type: FileStatusExtension,
+                      file_ext: str = ".txt") -> str:
+        """
+        Generates a filename for a commit report
+        """
 
 
 # Discover and initialize all Reports

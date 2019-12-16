@@ -7,15 +7,18 @@ import typing as tp
 import random
 import traceback
 from pathlib import Path
+from abc import abstractmethod
 
 from plumbum.commands import ProcessExecutionError
 from plumbum.commands.base import BoundCommand
 
 from benchbuild.experiment import Experiment
 from benchbuild.project import Project
+from benchbuild.utils.actions import Step
 from benchbuild.settings import CFG
 
-from varats.data.revisions import get_processed_revisions
+from varats.data.revisions import get_tagged_revisions
+from varats.data.report import FileStatusExtension, BaseReport
 from varats.settings import CFG as V_CFG
 
 
@@ -39,9 +42,9 @@ class FunctionPEErrorWrapper():
             self.__handler(ex)
 
 
-def exec_func_with_pe_error_handler(
-        func: tp.Callable[..., tp.Any],
-        handler: tp.Callable[[Exception], None]) -> None:
+def exec_func_with_pe_error_handler(func: tp.Callable[..., tp.Any],
+                                    handler: tp.Callable[[Exception], None]
+                                   ) -> None:
     """
     Execute a function call with an exception handler.
 
@@ -92,57 +95,107 @@ Timeout after: {timeout_duration}
                     outfile.write(extra_error)
                     outfile.flush()
 
-            outfile.write("Exception:\n")
-            outfile.write(str(ex) + "\n")
-            outfile.write("Traceback:\n")
+            outfile.write("-----\nTraceback:\n")
             traceback.print_exc(file=outfile)
 
         raise ex
 
 
-class VaRAVersionExperiment(Experiment):  # type: ignore
+def get_default_compile_error_wrapped(project: Project,
+                                      report_type: tp.Type[BaseReport],
+                                      result_folder_template: str
+                                     ) -> FunctionPEErrorWrapper:
+    """
+    Setup the default project compile function with an error handler.
+    """
+    return FunctionPEErrorWrapper(
+        project.compile,
+        PEErrorHandler(
+            result_folder_template.format(result_dir=str(
+                CFG["vara"]["outfile"]),
+                                          project_dir=str(project.name)),
+            report_type.get_file_name(
+                project_name=str(project.name),
+                binary_name="all",
+                project_version=str(project.version),
+                project_uuid=str(project.run_uuid),
+                extension_type=FileStatusExtension.CompileError,
+                file_ext=".txt")))
+
+
+class VersionExperiment(Experiment):  # type: ignore
+    """
+    Base class for experiments that want to analyze different project
+    revisions.
+    """
+
+    @abstractmethod
+    def actions_for_project(self, project: Project) -> tp.List[Step]:
+        """Get the actions a project wants to run."""
+
     @staticmethod
-    def __sample_num_versions(versions: tp.List[str]) -> tp.List[str]:
+    def _sample_num_versions(versions: tp.List[str]) -> tp.List[str]:
+        if V_CFG["experiment"]["sample_limit"].value is None:
+            return versions
+
         sample_size = int(V_CFG["experiment"]["sample_limit"])
         versions = [
             versions[i] for i in sorted(
-                random.sample(
-                    range(len(versions)), min(sample_size, len(versions))))
+                random.sample(range(len(versions)),
+                              min(sample_size, len(versions))))
         ]
         return versions
 
-    def sample(self, prj_cls: tp.Type[Project],
-               versions: tp.List[str]) -> tp.Generator[str, None, None]:
+    def sample(self,
+               prj_cls: tp.Type[Project],
+               versions: tp.Optional[tp.List[str]] = None
+              ) -> tp.Generator[str, None, None]:
         """
         Adapt version sampling process if needed, otherwise fallback to default
         implementation.
         """
+        if versions is None:
+            versions = []
+
         if bool(V_CFG["experiment"]["random_order"]):
             random.shuffle(versions)
 
-        if bool(V_CFG["experiment"]["only_missing"]):
+        fs_blacklist = V_CFG["experiment"]["file_status_blacklist"].value
+        fs_whitelist = V_CFG["experiment"]["file_status_whitelist"].value
+
+        if fs_blacklist or fs_whitelist:
+            fs_good = {x for x in FileStatusExtension
+                      } if not fs_whitelist else set()
+
+            fs_good -= {
+                FileStatusExtension.get_file_status_from_str(x)
+                for x in fs_blacklist
+            }
+            fs_good |= {
+                FileStatusExtension.get_file_status_from_str(x)
+                for x in fs_whitelist
+            }
+
             if not hasattr(self, 'REPORT_TYPE'):
-                raise TypeError("Sub class does not implement REPORT_TYPE.")
-            versions = [
-                vers for vers in versions
-                if vers not in get_processed_revisions(
-                    prj_cls.NAME, getattr(self, 'REPORT_TYPE'))
-            ]
+                raise TypeError(
+                    "Experiment sub class does not implement REPORT_TYPE.")
+
+            for revision, file_status in get_tagged_revisions(
+                    prj_cls.NAME, getattr(self, 'REPORT_TYPE')):
+                if file_status not in fs_good and revision in versions:
+                    versions.remove(revision)
+
             if not versions:
                 print("Could not find any unprocessed versions.")
                 return
 
-            if V_CFG["experiment"]["sample_limit"].value is not None:
-                versions = self.__sample_num_versions(versions)
-
-            head, *tail = versions
+            head, *tail = self._sample_num_versions(versions)
             yield head
             if bool(CFG["versions"]["full"]):
                 for version in tail:
                     yield version
         else:
-            if V_CFG["experiment"]["sample_limit"].value is not None:
-                versions = self.__sample_num_versions(versions)
+            versions = self._sample_num_versions(versions)
 
             for val in Experiment.sample(self, prj_cls, versions):
                 yield val

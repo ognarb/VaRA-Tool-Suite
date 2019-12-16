@@ -28,7 +28,7 @@ sudo apt install python3-venv # If you want to install VaRA-TS in a python virtu
 
 Additional packages are required to build VaRA from source.
 ```bash
-sudo apt install libsqlite3-dev libcurl4-openssl-dev libboost-all-dev libpapi-dev
+sudo apt install libsqlite3-dev libcurl4-openssl-dev libboost-all-dev libpapi-dev googletest
 ```
 
 ### Install VaRA-TS
@@ -101,10 +101,10 @@ vara-gen-bbconfig
 ```
 
 ### Running BenchBuild experiments
-Second, we change into the benchbuild folder and run an experiment like `GitBlameAnnotationReport` on provided projects, in this case we use `gzip`.
+Second, we change into the benchbuild folder and run an experiment that generates `CommitReports` for provided projects, in this case we use `gzip`.
 ```console
 cd $VARA_ROOT/benchbuild
-benchbuild -vv run -E GitBlameAnnotationReport gzip
+benchbuild -vv run -E GenerateCommitReport gzip
 ```
 The generated result files are place in the `vara/results/$PROJECT_NAME` folder and can be further visualized with VaRA-TS graph generators.
 

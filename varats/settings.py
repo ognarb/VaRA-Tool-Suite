@@ -39,11 +39,11 @@ CFG = s.Configuration(
         },
         "own_libgit2": {
             "default": True,
-            "desc": "Build own libgit2",
+            "desc": "Build own libgit2 [Deprecated]",
         },
         "include_phasar": {
             "default": True,
-            "desc": "Include Phasar for static analysis",
+            "desc": "Include Phasar for static analysis [Deprecated]",
         },
     })
 
@@ -65,10 +65,8 @@ CFG["env"] = {
 
 CFG['db'] = {
     "connect_string": {
-        "desc":
-        "sqlalchemy connect string",
-        "default":
-        "sqlite://"
+        "desc": "sqlalchemy connect string",
+        "default": "sqlite://"
     },
     "rollback": {
         "desc": "Rollback all operations after benchbuild completes.",
@@ -83,7 +81,18 @@ CFG['db'] = {
 CFG['experiment'] = {
     "only_missing": {
         "default": True,
-        "desc": "Only run missing version"
+        "desc": "Only run missing version [Deprecated]"
+                "This option is replaced by file_status_blacklist = [Success]"
+    },
+    "file_status_blacklist": {
+        "default": ['Success', 'Blocked'],
+        "desc": "Do not include revision with these file status for benchbuild "
+                "processing"
+    },
+    "file_status_whitelist": {
+        "default": [],
+        "desc": "Only include revision with these file status for benchbuild "
+                "processing"
     },
     "random_order": {
         "default": False,
@@ -99,6 +108,10 @@ CFG['plots'] = {
     "data_cache": {
         "default": "data_cache",
         "desc": "Local data cache to store preprocessed files."
+    },
+    "plot_dir": {
+        "desc": "Folder for generated plots",
+        "default": None,
     },
 }
 
@@ -121,8 +134,8 @@ def create_missing_folders() -> None:
     Create a folders that do not exist but where set in the config.
     """
 
-    def create_missing_folder_for_cfg(
-            cfg_varname: str, local_cfg: s.Configuration = CFG) -> None:
+    def create_missing_folder_for_cfg(cfg_varname: str,
+                                      local_cfg: s.Configuration = CFG) -> None:
         """
         Create missing folders for a specific config path.
         """
@@ -136,6 +149,7 @@ def create_missing_folders() -> None:
     create_missing_folder_for_cfg("benchbuild_root")
     create_missing_folder_for_cfg("result_dir")
     create_missing_folder_for_cfg("data_cache", CFG["plots"])
+    create_missing_folder_for_cfg("plot_dir", CFG["plots"])
 
 
 def save_config() -> None:
@@ -148,8 +162,10 @@ def save_config() -> None:
         config_file = str(CFG["config_file"])
     CFG["config_file"] = path.abspath(config_file)
     if CFG["result_dir"].value is None:
-        CFG["result_dir"] = path.dirname(str(CFG["config_file"])) +\
-            "/results"
+        CFG["result_dir"] = path.dirname(str(CFG["config_file"])) + "/results"
+    if CFG["plots"]["plot_dir"].value is None:
+        CFG["plots"]["plot_dir"] = path.dirname(str(
+            CFG["config_file"])) + "/plots"
 
     create_missing_folders()
     CFG.store(config_file)
@@ -170,12 +186,14 @@ def generate_benchbuild_config(vara_cfg: s.Configuration,
     projects_conf.value[:] = []
     projects_conf.value[:] += [
         'varats.projects.c_projects.busybox',
+        'varats.projects.c_projects.coreutils',
         'varats.projects.c_projects.git',
         'varats.projects.c_projects.gravity',
         'varats.projects.c_projects.gzip',
         'varats.projects.c_projects.libvpx',
         'varats.projects.c_projects.lrzip',
         'varats.projects.c_projects.opus',
+        'varats.projects.c_projects.openssl',
         'varats.projects.c_projects.tmux',
         'varats.projects.c_projects.vim',
         'varats.projects.c_projects.x264',
@@ -192,9 +210,8 @@ def generate_benchbuild_config(vara_cfg: s.Configuration,
     projects_conf = BB_CFG["plugins"]["experiments"]
     projects_conf.value[:] = []
     projects_conf.value[:] += [
-        'varats.experiments.git_blame_annotation_report',
-        'varats.experiments.marker_tester',
-        'varats.experiments.just_compile',
+        'varats.experiments.commit_report_experiment',
+        'varats.experiments.marker_tester', 'varats.experiments.just_compile',
         'varats.experiments.vara_full_mtfa',
         'varats.experiments.vara_fc_taint_analysis',
         'varats.experiments.phasar_env_analysis',

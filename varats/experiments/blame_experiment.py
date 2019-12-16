@@ -15,13 +15,13 @@ import benchbuild.utils.actions as actions
 
 from varats.experiments.extract import Extract
 from varats.experiments.wllvm import RunWLLVM
-from varats.utils.experiment_util import (FunctionPEErrorWrapper,
-                                          PEErrorHandler)
+from varats.utils.experiment_util import get_default_compile_error_wrapped
+from varats.data.report import BaseReport
 
 
 def setup_basic_blame_experiment(experiment: Experiment, project: Project,
-                                 result_folder: str,
-                                 compile_error_file: str) -> None:
+                                 report_type: tp.Type[BaseReport],
+                                 result_folder_template: str) -> None:
     """
     Setup the project for a blame experiment.
         - run time extensions
@@ -39,8 +39,8 @@ def setup_basic_blame_experiment(experiment: Experiment, project: Project,
         << run.WithTimeout()
 
     # Add own error handler to compile step.
-    project.compile = FunctionPEErrorWrapper(
-        project.compile, PEErrorHandler(result_folder, compile_error_file))
+    project.compile = get_default_compile_error_wrapped(
+        project, report_type, result_folder_template)
 
     # This c-flag is provided by VaRA and it suggests to use the git-blame
     # annotation.
@@ -58,14 +58,14 @@ def generate_basic_blame_experiment_actions(project: Project
 
     # Check if all binaries have corresponding BC files
     all_files_present = True
-    for binary_name in project.BIN_NAMES:
+    for binary in project.binaries:
         all_files_present &= path.exists(
             local.path(
                 Extract.BC_CACHE_FOLDER_TEMPLATE.format(
                     cache_dir=str(CFG["vara"]["result"]),
                     project_name=str(project.name)) +
                 Extract.BC_FILE_TEMPLATE.format(project_name=str(project.name),
-                                                binary_name=binary_name,
+                                                binary_name=binary.name,
                                                 project_version=str(
                                                     project.version))))
 

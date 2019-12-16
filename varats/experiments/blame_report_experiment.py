@@ -19,8 +19,7 @@ import varats.experiments.blame_experiment as BE
 from varats.data.reports.blame_report import BlameReport as BR
 from varats.data.report import FileStatusExtension as FSE
 from varats.utils.experiment_util import (exec_func_with_pe_error_handler,
-                                          VaRAVersionExperiment,
-                                          PEErrorHandler)
+                                          VersionExperiment, PEErrorHandler)
 
 
 class BlameReportGeneration(actions.Step):  # type: ignore
@@ -65,9 +64,9 @@ class BlameReportGeneration(actions.Step):  # type: ignore
 
         mkdir("-p", vara_result_folder)
 
-        for binary_name in project.BIN_NAMES:
+        for binary in project.binaries:
             result_file = BR.get_file_name(project_name=str(project.name),
-                                           binary_name=binary_name,
+                                           binary_name=binary.name,
                                            project_version=str(
                                                project.version),
                                            project_uuid=str(project.run_uuid),
@@ -82,7 +81,7 @@ class BlameReportGeneration(actions.Step):  # type: ignore
             opt_params.append(bc_cache_folder /
                               Extract.BC_FILE_TEMPLATE.format(
                                   project_name=project.name,
-                                  binary_name=binary_name,
+                                  binary_name=binary.name,
                                   project_version=project.version))
 
             run_cmd = opt[opt_params]
@@ -95,7 +94,7 @@ class BlameReportGeneration(actions.Step):  # type: ignore
                 PEErrorHandler(
                     vara_result_folder,
                     BR.get_file_name(project_name=str(project.name),
-                                     binary_name=binary_name,
+                                     binary_name=binary.name,
                                      project_version=str(project.version),
                                      project_uuid=str(project.run_uuid),
                                      extension_type=FSE.Failed,
@@ -103,7 +102,7 @@ class BlameReportGeneration(actions.Step):  # type: ignore
                     timeout_duration))
 
 
-class BlameReportExperiment(VaRAVersionExperiment):
+class BlameReportExperiment(VersionExperiment):
     """
     Generates a commit flow report (CFR) of the project(s) specified in the
     call.
@@ -118,16 +117,8 @@ class BlameReportExperiment(VaRAVersionExperiment):
         the call in a fixed order."""
 
         BE.setup_basic_blame_experiment(
-            self, project,
-            BlameReportGeneration.RESULT_FOLDER_TEMPLATE.format(
-                result_dir=str(CFG["vara"]["outfile"]),
-                project_dir=str(project.name)),
-            BR.get_file_name(project_name=str(project.name),
-                             binary_name="all",
-                             project_version=str(project.version),
-                             project_uuid=str(project.run_uuid),
-                             extension_type=FSE.CompileError,
-                             file_ext=".txt"))
+            self, project, BR, BlameReportGeneration.RESULT_FOLDER_TEMPLATE)
+
         analysis_actions = BE.generate_basic_blame_experiment_actions(project)
 
         analysis_actions.append(BlameReportGeneration(project))
